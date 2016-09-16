@@ -1,5 +1,6 @@
 (ns pronouns.pages
   (:require [clojure.string :as s]
+            [pronouns.config :refer [*pronouns-table*]]
             [pronouns.util :as u]
             [hiccup.core :refer :all]
             [hiccup.util :refer [escape-html]]))
@@ -43,13 +44,17 @@
 
 (defn examples-block
   [subject object possessive-determiner possessive-pronoun reflexive]
-  [:div {:class "examples"}
-   [:p [:h2 "Here are some usage examples for my pronouns:"]]
-   (subject-example subject)
-   (object-example object)
-   (posessive-determiner-example subject possessive-determiner)
-   (possessive-pronoun-example possessive-pronoun)
-   (reflexive-example subject reflexive)])
+  (let [sub-obj (str subject "/" object)
+        header-str (str "Here are some usage examples for my "
+                        sub-obj
+                        " pronouns")]
+    [:div {:class "examples"}
+     [:p [:h2 header-str]]
+     (subject-example subject)
+     (object-example object)
+     (posessive-determiner-example subject possessive-determiner)
+     (possessive-pronoun-example possessive-pronoun)
+     (reflexive-example subject reflexive)]))
 
 (defn about-block []
   [:div {:class "about"}
@@ -65,41 +70,42 @@
     "Written by "
     (twitter-name "morganastra")
     ", whose "
-    [:a {:href "http://pronoun.is/ze/zir"} "pronoun.is/ze/zir"]
+    [:a {:href "http://pronoun.is/ze/zir?or=she"} "pronoun.is/ze/zir?or=she"]
     ". "
    "Visit the project on " [:a {:href "https://github.com/witch-house/pronoun.is"} "github!"]]]))
 
 
 (defn format-pronoun-examples
-  [subject object possessive-determiner possessive-pronoun reflexive]
+  [pronoun-declensions]
   (let [title "Pronoun Island: English Language Examples"]
-  (html
-   [:html
-    [:head
-     [:title title]
-     [:meta {:name "viewport" :content "width=device-width"}]
-     [:link {:rel "stylesheet" :href "/pronouns.css"}]]
-    [:body
-     (title-block title)
-     (examples-block subject object possessive-determiner possessive-pronoun reflexive)
-     (about-block)
-     (contact-block)]])))
+    (html
+     [:html
+      [:head
+       [:title title]
+       [:meta {:name "viewport" :content "width=device-width"}]
+       [:link {:rel "stylesheet" :href "/pronouns.css"}]]
+      [:body
+       (title-block title)
+       (map #(apply examples-block %) pronoun-declensions)
+       (about-block)
+       (contact-block)]])))
 
-
-(defn parse-pronouns-with-lookup [pronouns-string pronouns-table]
+(defn lookup-pronouns [pronouns-string]
   (let [inputs (s/split pronouns-string #"/")
         n (count inputs)]
+    (println *pronouns-table*)
     (if (>= n 5)
       (take 5 inputs)
-      (u/table-lookup inputs pronouns-table))))
+      (u/table-lookup inputs *pronouns-table*))))
 
 (defn make-link [path]
   (let [link (str "/" path)
         label path]
     [:li [:a {:href link} label]]))
 
-(defn front [pronouns-table]
-  (let [abbreviations (u/abbreviate pronouns-table)
+(defn front []
+  (let [blah (println *pronouns-table*)
+        abbreviations (u/abbreviate *pronouns-table*)
         links (map make-link abbreviations)
         title "Pronoun Island"]
     (html
@@ -117,12 +123,28 @@
       (contact-block)])))
 
 (defn not-found []
-  (str "We couldn't find those pronouns in our database, please ask us to "
-       "add them, or issue a pull request at "
-       "https://github.com/witch-house/pronoun.is/blob/master/resources/pronouns.tab"))
+  (let [title "Pronoun Island: English Language Examples"]
+    (html
+     [:html
+      [:head
+       [:title title]
+       [:meta {:name "viewport" :content "width=device-width"}]
+       [:link {:rel "stylesheet" :href "/pronouns.css"}]]
+      [:body
+       (title-block title)
+      [:div {:class "examples"}
+       [:p [:h2 (str "We couldn't find those pronouns in our database."
+                     "If you think we should have them, please reach out!")]]]
+       (about-block)
+       (contact-block)]])))
 
-(defn pronouns [path pronouns-table]
-  (let [pronouns (parse-pronouns-with-lookup (escape-html path) pronouns-table)]
-    (if pronouns
-      (apply format-pronoun-examples pronouns)
+(defn pronouns [params]
+  (let [path (params :*)
+        alts (or (params "or") [])
+        pronouns (concat [path] (u/vec-coerce alts))
+        pronoun-declensions (filter some? (map #(lookup-pronouns
+                                                 (escape-html %))
+                                               pronouns))]
+    (if (seq pronoun-declensions)
+      (format-pronoun-examples pronoun-declensions)
       (not-found))))
